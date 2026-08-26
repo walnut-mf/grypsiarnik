@@ -1,0 +1,210 @@
+#include <Arduino.h>
+#include "BluetoothSerial.h"
+
+#if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
+#endif
+
+BluetoothSerial BT;
+
+
+const int NUM_SENSORS = 8;
+const int sensorPins[NUM_SENSORS] = {34, 35, 32, 33, 25, 26, 4, 15};
+
+const int LINE_DETECTED = HIGH;
+
+const int sensorWeight[NUM_SENSORS] = {-3500, -2500, -1500, -500, 500, 1500, 2500, 3500};
+
+
+const int L_PWMA = 13;
+const int L_AIN1 = 12;
+const int L_AIN2 = 27;
+const int L_STBY = 14;
+
+
+const int R_PWMA = 5;
+const int R_AIN1 = 18;
+const int R_AIN2 = 19;
+const int R_STBY = 21;
+
+
+const int PWM_FREQ = 20000;
+const int PWM_RES  = 8;
+const int LEDC_CH_L = 0;
+const int LEDC_CH_R = 1;
+
+
+int BASE_SPEED = 150;
+int MAX_SPEED  = 220;
+int JOG_SPEED  = 110;   
+float Kp = 0.045;
+float Ki = 0.0;
+float Kd = 0.25;
+
+int lastError = 0;
+long integral = 0;
+unsigned long lastLineSeenMillis = 0;
+const unsigned long LINE_LOST_TIMEOUT = 400;
+
+
+enum RobotState { IDLE, LINE_FOLLOWING, JOG_LEFT, JOG_RIGHT };
+RobotState state = IDLE;
+
+void setup() {
+  Serial.begin(115200);
+  BT.begin("LineFollowerBot"); // device name shown when pairing
+
+  for (int i = 0; i < NUM_SENSORS; i++) {
+    pinMode(sensorPins[i], INPUT);
+  }
+
+  pinMode(L_AIN1, OUTPUT);
+  pinMode(L_AIN2, OUTPUT);
+  pinMode(L_STBY, OUTPUT);
+  pinMode(R_AIN1, OUTPUT);
+  pinMode(R_AIN2, OUTPUT);
+  pinMode(R_STBY, OUTPUT);
+
+  ledcSetup(LEDC_CH_L, PWM_FREQ, PWM_RES);
+  ledcAttachPin(L_PWMA, LEDC_CH_L);
+  ledcSetup(LEDC_CH_R, PWM_FREQ, PWM_RES);
+  ledcAttachPin(R_PWMA, LEDC_CH_R);
+
+  digitalWrite(L_STBY, HIGH); // take both drivers out of standby
+  digitalWrite(R_STBY, HIGH);
+
+  stopMotors();
+  Serial.println("Ready. Send S=start, X=stop, L=jog left wheel, R=jog right wheel.");
+}
+
+void loop() {
+  handleBluetoothCommands();
+
+  switch (state) {
+    case LINE_FOLLOWING:
+      runLineFollowing();
+      break;
+    case JOG_LEFT:
+      driveMotor(true, JOG_SPEED);
+      driveMotor(false, 0);
+      break;
+    case JOG_RIGHT:
+      driveMotor(true, 0);
+      driveMotor(false, JOG_SPEED);
+      break;
+    case IDLE:
+    default:
+      stopMotors();
+      break;
+  }
+}
+
+void handleBluetoothCommands() {
+  if (!BT.available()) return;
+
+  char c = BT.read();
+  switch (c) {
+    case 'S': case 's':
+      state = LINE_FOLLOWING;
+      integral = 0; // reset PID history on (re)start
+      lastError = 0;
+      lastLineSeenMillis = millis();
+      BT.println("OK: line following started");
+      break;
+    case 'X': case 'x':
+      state = IDLE;
+      BT.println("OK: stopped");
+      break;
+    case 'L': case 'l':
+      state = JOG_LEFT;
+      BT.println("OK: jogging left wheel");
+      break;
+    case 'R': case 'r':
+      state = JOG_RIGHT;
+      BT.println("OK: jogging right wheel");
+      break;
+    default:
+      // ignore newlines / unknown bytes
+      break;
+  }
+}
+
+void runLineFollowing() {
+  int readings[NUM_SENSORS];
+  int activeCount = 0;
+  long weightedSum = 0;
+
+  for (int i = 0; i < NUM_SENSORS; i++) {
+    readings[i] = digitalRead(sensorPins[i]);
+    if (readings[i] == LINE_DETECTED) {
+      activeCount++;
+      weightedSum += sensorWeight[i];
+    }
+  }
+
+  int error;
+
+  if (activeCount > 0) {
+    error = weightedSum / activeCount;
+    lastError = error;
+    lastLineSeenMillis = millis();
+  } else {
+    if (millis() - lastLineSeenMillis > LINE_LOST_TIMEOUT) {
+      searchForLine();
+      return;
+    }
+    error = (lastError < 0) ? -3500 : 3500;
+  }
+
+  integral += error;
+  int derivative = error - lastError;
+  float correction = (Kp * error) + (Ki * integral) + (Kd * derivative);
+
+  int leftSpeed  = BASE_SPEED + correction;
+  int rightSpeed = BASE_SPEED - correction;
+
+  leftSpeed  = constrain(leftSpeed, 0, MAX_SPEED);
+  rightSpeed = constrain(rightSpeed, 0, MAX_SPEED);
+
+  driveMotor(true, leftSpeed);
+  driveMotor(false, rightSpeed);
+
+  lastError = error;
+}
+
+// left=true -> left motor, false -> right motor. speed can be -MAX..+MAX.
+void driveMotor(bool left, int speed) {
+  speed = constrain(speed, -MAX_SPEED, MAX_SPEED);
+  int in1 = left ? L_AIN1 : R_AIN1;
+  int in2 = left ? L_AIN2 : R_AIN2;
+  int ch  = left ? LEDC_CH_L : LEDC_CH_R;
+
+  if (speed >= 0) {
+    digitalWrite(in1, HIGH);
+    digitalWrite(in2, LOW);
+  } else {
+    digitalWrite(in1, LOW);
+    digitalWrite(in2, HIGH);
+    speed = -speed;
+  }
+  ledcWrite(ch, speed);
+}
+
+void stopMotors() {
+  digitalWrite(L_AIN1, LOW);
+  digitalWrite(L_AIN2, LOW);
+  digitalWrite(R_AIN1, LOW);
+  digitalWrite(R_AIN2, LOW);
+  ledcWrite(LEDC_CH_L, 0);
+  ledcWrite(LEDC_CH_R, 0);
+}
+
+void searchForLine() {
+  int searchSpeed = 120;
+  if (lastError < 0) {
+    driveMotor(true, -searchSpeed);
+    driveMotor(false, searchSpeed);
+  } else {
+    driveMotor(true, searchSpeed);
+    driveMotor(false, -searchSpeed);
+  }
+}
