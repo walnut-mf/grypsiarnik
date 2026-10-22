@@ -1,41 +1,31 @@
 #include <Arduino.h>
-#include "BluetoothSerial.h"
-
-#if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
-#endif
-
-BluetoothSerial BT;
-
 
 const int NUM_SENSORS = 8;
 const int sensorPins[NUM_SENSORS] = {34, 35, 32, 33, 25, 26, 4, 15};
 
 const int LINE_DETECTED = HIGH;
-
 const int sensorWeight[NUM_SENSORS] = {-3500, -2500, -1500, -500, 500, 1500, 2500, 3500};
-
 
 const int L_PWMA = 13;
 const int L_AIN1 = 12;
 const int L_AIN2 = 27;
 const int L_STBY = 14;
 
-
 const int R_PWMA = 5;
 const int R_AIN1 = 18;
 const int R_AIN2 = 19;
 const int R_STBY = 21;
 
+const int BUTTON_PIN = 23;
 
 const int PWM_FREQ = 20000;
 const int PWM_RES  = 8;
 const int LEDC_CH_L = 0;
 const int LEDC_CH_R = 1;
 
-
 int BASE_SPEED = 150;
 int MAX_SPEED  = 220;
-int JOG_SPEED  = 110;   
+
 float Kp = 0.045;
 float Ki = 0.0;
 float Kd = 0.25;
@@ -45,17 +35,27 @@ long integral = 0;
 unsigned long lastLineSeenMillis = 0;
 const unsigned long LINE_LOST_TIMEOUT = 400;
 
+unsigned long lastDebounceTime = 0;
+const unsigned long debounceDelay = 50;
+bool lastButtonState = HIGH;
 
-enum RobotState { IDLE, LINE_FOLLOWING, JOG_LEFT, JOG_RIGHT };
+enum RobotState { IDLE, LINE_FOLLOWING };
 RobotState state = IDLE;
+
+void handleButton();
+void runLineFollowing();
+void driveMotor(bool left, int speed);
+void stopMotors();
+void searchForLine();
 
 void setup() {
   Serial.begin(115200);
-  BT.begin("LineFollowerBot"); // device name shown when pairing
 
   for (int i = 0; i < NUM_SENSORS; i++) {
     pinMode(sensorPins[i], INPUT);
   }
+
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
 
   pinMode(L_AIN1, OUTPUT);
   pinMode(L_AIN2, OUTPUT);
@@ -69,27 +69,19 @@ void setup() {
   ledcSetup(LEDC_CH_R, PWM_FREQ, PWM_RES);
   ledcAttachPin(R_PWMA, LEDC_CH_R);
 
-  digitalWrite(L_STBY, HIGH); // take both drivers out of standby
+  digitalWrite(L_STBY, HIGH);
   digitalWrite(R_STBY, HIGH);
 
   stopMotors();
-  Serial.println("Ready. Send S=start, X=stop, L=jog left wheel, R=jog right wheel.");
+  Serial.println("Ready. Press the push button on GPIO 23 to start/stop.");
 }
 
 void loop() {
-  handleBluetoothCommands();
+  handleButton();
 
   switch (state) {
     case LINE_FOLLOWING:
       runLineFollowing();
-      break;
-    case JOG_LEFT:
-      driveMotor(true, JOG_SPEED);
-      driveMotor(false, 0);
-      break;
-    case JOG_RIGHT:
-      driveMotor(true, 0);
-      driveMotor(false, JOG_SPEED);
       break;
     case IDLE:
     default:
@@ -98,34 +90,29 @@ void loop() {
   }
 }
 
-void handleBluetoothCommands() {
-  if (!BT.available()) return;
+void handleButton() {
+  int reading = digitalRead(BUTTON_PIN);
 
-  char c = BT.read();
-  switch (c) {
-    case 'S': case 's':
-      state = LINE_FOLLOWING;
-      integral = 0; // reset PID history on (re)start
-      lastError = 0;
-      lastLineSeenMillis = millis();
-      BT.println("OK: line following started");
-      break;
-    case 'X': case 'x':
-      state = IDLE;
-      BT.println("OK: stopped");
-      break;
-    case 'L': case 'l':
-      state = JOG_LEFT;
-      BT.println("OK: jogging left wheel");
-      break;
-    case 'R': case 'r':
-      state = JOG_RIGHT;
-      BT.println("OK: jogging right wheel");
-      break;
-    default:
-      // ignore newlines / unknown bytes
-      break;
+  if (reading != lastButtonState) {
+    lastDebounceTime = millis();
   }
+
+  if ((millis() - lastDebounceTime) > debounceDelay) {
+    // Button pressed (LOW because of INPUT_PULLUP)
+    if (reading == LOW && lastButtonState == HIGH) {
+      if (state == IDLE) {
+        state = LINE_FOLLOWING;
+        integral = 0; 
+        lastError = 0;
+        lastLineSeenMillis = millis();
+        Serial.println("Line following started");
+      } else {
+        state = IDLE;
+        Serial.println("Robot stopped");
+      }
+    }
+  }
+  lastButtonState = reading;
 }
 
 void runLineFollowing() {
@@ -171,7 +158,6 @@ void runLineFollowing() {
   lastError = error;
 }
 
-// left=true -> left motor, false -> right motor. speed can be -MAX..+MAX.
 void driveMotor(bool left, int speed) {
   speed = constrain(speed, -MAX_SPEED, MAX_SPEED);
   int in1 = left ? L_AIN1 : R_AIN1;
