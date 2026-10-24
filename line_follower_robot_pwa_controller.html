@@ -1,511 +1,431 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full select-none">
+<html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Line Follower</title>
   
-  <title>LF Bot Control</title>
-
-  <!-- PWA Meta Tags -->
-  <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="theme-color" content="#000000" />
-  <meta name="description" content="Ultra-minimalist PWA controller for ESP32 Line Follower Robot" />
-
+  <!-- PWA & Mobile Settings -->
+  <meta name="theme-color" content="#000000">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Line Follower">
+  
   <!-- Embedded Web App Manifest -->
-  <link id="manifest-link" rel="manifest" />
-
-  <!-- Tailwind CSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            oled: {
-              bg: '#000000',
-              card: '#09090b',
-              border: '#18181b',
-              subtle: '#27272a',
-              green: '#22c55e',
-              red: '#ef4444',
-              accent: '#38bdf8'
-            }
-          },
-          fontFamily: {
-            mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
-            sans: ['Inter', 'system-ui', 'sans-serif']
-          }
-        }
-      }
-    }
-  </script>
-
-  <!-- Lucide Icons -->
-  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="manifest" href="data:application/manifest+json;utf8,%7B%22name%22%3A%22Line%20Follower%20Control%22%2C%22short_name%22%3A%22Line%20Follower%22%2C%22start_url%22%3A%22.%2F%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23000000%22%2C%22theme_color%22%3A%22%23000000%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22data%3Aimage%2Fsvg%2Bxml%2C%253Csvg%2520xmlns%253D'http%253A%252F%252Fwww.w3.org%252F2000%252Fsvg'%2520viewBox%253D'0%25200%2520512%2520512'%253E%253Crect%2520width%253D'512'%2520height%253D'512'%2520fill%253D'%2523000000'%252F%253E%253Ccircle%2520cx%253D'256'%2520cy%253D'256'%2520r%253D'180'%2520fill%253D'none'%2520stroke%253D'%252300f2fe'%2520stroke-width%253D'32'%252F%253E%253Cpath%2520d%253D'M180%2520360%2520L256%2520160%2520L332%2520360'%2520fill%253D'none'%2520stroke%253D'%252300f2fe'%2520stroke-width%253D'32'%2520stroke-linecap%253D'round'%2520stroke-linejoin%253D'round'%252F%253E%253C%252Fsvg%253E%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fsvg%2Bxml%22%2C%22purpose%22%3A%22any%20maskable%22%7D%5D%7D">
 
   <style>
-    /* Strict Viewport & No Scroll Guardrails */
-    html, body {
-      height: 100dvh;
-      width: 100vw;
-      overflow: hidden;
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
       touch-action: manipulation;
-      background-color: #000000;
-      color: #f4f4f5;
-      font-family: 'Inter', system-ui, sans-serif;
-      -webkit-tap-highlight-color: transparent;
+    }
+    
+    html, body {
+      width: 100vw;
+      height: 100dvh;
+      overflow: hidden;
+      background: #000;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
 
-    /* Tactile button pressed effect */
-    .btn-tactile:active {
-      transform: scale(0.96);
-      filter: brightness(1.15);
+    .app-container {
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
+      padding: 12px 16px;
+      gap: 12px;
+      max-width: 500px;
+      margin: 0 auto;
     }
 
-    /* Minimalist Glow Effects */
-    .glow-green {
-      box-shadow: 0 0 25px rgba(34, 197, 94, 0.25);
+    /* Header */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid #1f1f23;
     }
-    .glow-red {
-      box-shadow: 0 0 25px rgba(239, 68, 68, 0.25);
+
+    .title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: #8e8e93;
+      text-transform: uppercase;
     }
-    .glow-cyan {
-      box-shadow: 0 0 20px rgba(56, 189, 248, 0.2);
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 20px;
+      background: #1c1c1e;
+      color: #8e8e93;
+    }
+
+    .status-badge.connected {
+      background: rgba(48, 209, 88, 0.15);
+      color: #30d158;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #8e8e93;
+    }
+
+    .status-badge.connected .status-dot {
+      background: #30d158;
+      box-shadow: 0 0 8px #30d158;
+    }
+
+    /* Action Grid */
+    .controls-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1.4fr 1fr 1fr;
+      gap: 10px;
+      flex: 1;
+    }
+
+    .btn {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid #2c2c2e;
+      background: #1c1c1e;
+      color: #fff;
+      border-radius: 16px;
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+    }
+
+    .btn:active {
+      transform: scale(0.97);
+      background: #2c2c2e;
+    }
+
+    .btn-main {
+      grid-column: span 2;
+      background: #0a84ff;
+      border: none;
+      font-size: 1.5rem;
+      box-shadow: 0 4px 20px rgba(10, 132, 255, 0.25);
+    }
+
+    .btn-main.running {
+      background: #ff453a;
+      box-shadow: 0 4px 20px rgba(255, 69, 58, 0.25);
+    }
+
+    .btn-secondary {
+      grid-column: span 2;
+      background: #121214;
+      border: 1px solid #27272a;
+    }
+
+    .btn-subtext {
+      font-size: 0.7rem;
+      font-weight: 500;
+      opacity: 0.6;
+    }
+
+    /* Connect & Install Buttons */
+    .action-bar {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn-connect {
+      flex: 1;
+      padding: 12px;
+      background: #2c2c2e;
+      border: none;
+      border-radius: 12px;
+      color: #0a84ff;
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+
+    .btn-install {
+      display: none;
+      padding: 12px;
+      background: #30d158;
+      color: #000;
+      border: none;
+      border-radius: 12px;
+      font-weight: 700;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+
+    /* Sensors Modal / Card */
+    .sensor-panel {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.92);
+      backdrop-filter: blur(10px);
+      z-index: 100;
+      padding: 24px 16px;
+      flex-direction: column;
+      justify-content: center;
+      gap: 16px;
+    }
+
+    .sensor-panel.active {
+      display: flex;
+    }
+
+    .sensor-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .close-btn {
+      background: #2c2c2e;
+      border: none;
+      color: #fff;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-weight: 600;
+    }
+
+    .sensor-grid {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      gap: 6px;
+      align-items: center;
+      padding: 20px 0;
+    }
+
+    .sensor-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sensor-led {
+      width: 100%;
+      height: 48px;
+      border-radius: 6px;
+      background: #1c1c1e;
+      border: 1px solid #2c2c2e;
+    }
+
+    .sensor-led.active {
+      background: #30d158;
+      border-color: #30d158;
+      box-shadow: 0 0 12px rgba(48, 209, 88, 0.6);
+    }
+
+    .sensor-pin {
+      font-size: 0.65rem;
+      color: #8e8e93;
     }
   </style>
 </head>
-<body class="h-full w-full flex flex-col justify-between p-4 sm:p-6 max-w-md mx-auto relative antialiased">
+<body>
 
-  <!-- HEADER / PWA & BLUETOOTH STATUS -->
-  <header class="flex items-center justify-between py-2 border-b border-oled-border">
-    <div class="flex items-center gap-2">
-      <div id="btDot" class="w-2.5 h-2.5 rounded-full bg-oled-red animate-pulse"></div>
-      <span id="btStatusText" class="text-xs font-mono tracking-widest text-zinc-400 uppercase">OFFLINE</span>
-    </div>
-
-    <div class="flex items-center gap-2">
-      <!-- PWA Install Button (hidden by default) -->
-      <button id="pwaInstallBtn" onclick="installPWA()" class="hidden text-xs font-mono px-2.5 py-1 rounded-full bg-oled-subtle border border-zinc-700 text-zinc-300 flex items-center gap-1.5 btn-tactile">
-        <i data-lucide="download" class="w-3.5 h-3.5 text-oled-accent"></i>
-        <span>INSTALL</span>
-      </button>
-
-      <!-- Bluetooth Connect Button -->
-      <button id="btBtn" onclick="toggleBluetooth()" class="text-xs font-mono px-3 py-1.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-200 flex items-center gap-1.5 btn-tactile hover:border-zinc-700">
-        <i data-lucide="bluetooth" class="w-3.5 h-3.5 text-oled-accent"></i>
-        <span id="btBtnLabel">CONNECT</span>
-      </button>
-    </div>
-  </header>
-
-  <!-- CENTER AREA: PRIMARY CONTROL GRID -->
-  <main class="flex-1 flex flex-col justify-center gap-4 py-4">
-
-    <!-- 1. START / STOP (MAIN FOCAL HERO ACTION) -->
-    <div class="flex-1 flex flex-col">
-      <button id="startStopBtn" onclick="toggleStartStop()" class="w-full h-full rounded-2xl bg-zinc-950 border-2 border-zinc-800 flex flex-col items-center justify-center p-6 transition-all duration-200 btn-tactile relative overflow-hidden group">
-        
-        <!-- Status Indicator Ring -->
-        <div id="heroPulseRing" class="w-20 h-20 rounded-full bg-zinc-900 flex items-center justify-center mb-3 transition-all duration-300">
-          <i id="heroIcon" data-lucide="play" class="w-10 h-10 text-zinc-400 transition-colors"></i>
-        </div>
-
-        <span id="heroTitle" class="text-2xl font-black font-mono tracking-wider text-white">START</span>
-        <span id="heroSub" class="text-[11px] font-mono text-zinc-500 mt-1 uppercase tracking-widest">CMD: 'S' (LINE FOLLOW)</span>
-
-        <!-- Active background highlight -->
-        <div id="heroBgHighlight" class="absolute inset-0 bg-transparent pointer-events-none transition-colors"></div>
-      </button>
-    </div>
-
-    <!-- 2. CLEAN LEFT & CLEAN RIGHT (JOG MOTORS) -->
-    <div class="grid grid-cols-2 gap-3 h-28 sm:h-32">
-      <!-- Clean Left -->
-      <button onclick="sendCommand('L')" class="rounded-xl bg-oled-card border border-oled-border p-4 flex flex-col justify-between btn-tactile text-left group hover:border-zinc-700">
-        <div class="flex justify-between items-center">
-          <i data-lucide="rotate-ccw" class="w-5 h-5 text-zinc-400 group-hover:text-sky-400"></i>
-          <span class="text-[10px] font-mono text-zinc-600">CMD: 'L'</span>
-        </div>
-        <div>
-          <div class="text-sm font-bold text-zinc-200">CLEAN LEFT</div>
-          <div class="text-[10px] font-mono text-zinc-500">Jog Left Wheel</div>
-        </div>
-      </button>
-
-      <!-- Clean Right -->
-      <button onclick="sendCommand('R')" class="rounded-xl bg-oled-card border border-oled-border p-4 flex flex-col justify-between btn-tactile text-left group hover:border-zinc-700">
-        <div class="flex justify-between items-center">
-          <i data-lucide="rotate-cw" class="w-5 h-5 text-zinc-400 group-hover:text-sky-400"></i>
-          <span class="text-[10px] font-mono text-zinc-600">CMD: 'R'</span>
-        </div>
-        <div>
-          <div class="text-sm font-bold text-zinc-200">CLEAN RIGHT</div>
-          <div class="text-[10px] font-mono text-zinc-500">Jog Right Wheel</div>
-        </div>
-      </button>
-    </div>
-
-    <!-- 3. CHECK SENSORS BUTTON -->
-    <button onclick="openSensorsModal()" class="w-full py-3.5 rounded-xl bg-oled-card border border-oled-border text-zinc-300 font-semibold text-xs font-mono flex items-center justify-center gap-2 btn-tactile hover:border-zinc-700">
-      <i data-lucide="scan-line" class="w-4 h-4 text-oled-accent"></i>
-      <span>CHECK SENSORS ARRAY</span>
-    </button>
-
-  </main>
-
-  <!-- FOOTER: SERIAL CONSOLE LOG -->
-  <footer class="pt-2 border-t border-oled-border">
-    <div class="flex items-center justify-between text-[10px] font-mono text-zinc-500 mb-1">
-      <span>LOG</span>
-      <span id="logTimestamp">Ready</span>
-    </div>
-    <div id="logOutput" class="h-8 bg-zinc-950 rounded-lg px-2.5 py-1.5 font-mono text-xs text-zinc-400 flex items-center justify-between border border-zinc-900 truncate">
-      <span class="truncate">Tap CONNECT to pair ESP32 LineFollowerBot</span>
-    </div>
-  </footer>
-
-  <!-- SENSORS MODAL / OVERLAY -->
-  <div id="sensorModal" class="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-200">
-    <div class="w-full max-w-sm bg-oled-card border border-oled-border rounded-2xl p-5 space-y-5">
-      
-      <!-- Modal Header -->
-      <div class="flex items-center justify-between border-b border-oled-border pb-3">
-        <div class="flex items-center gap-2">
-          <i data-lucide="cpu" class="w-4 h-4 text-oled-accent"></i>
-          <h3 class="text-sm font-mono font-bold text-white">8-IR SENSOR ARRAY</h3>
-        </div>
-        <button onclick="closeSensorsModal()" class="p-1 rounded-lg bg-zinc-900 text-zinc-400 hover:text-white">
-          <i data-lucide="x" class="w-4 h-4"></i>
-        </button>
+  <div class="app-container">
+    <header>
+      <span class="title">Line Follower</span>
+      <div id="statusBadge" class="status-badge">
+        <div class="status-dot"></div>
+        <span id="statusText">DISCONNECTED</span>
       </div>
+    </header>
 
-      <!-- Sensor Grid Indicators (Pins 34, 35, 32, 33, 25, 26, 4, 15) -->
-      <div class="grid grid-cols-8 gap-1.5 text-center">
-        <!-- Sensor 0 -->
-        <div class="space-y-1">
-          <div id="sens0" class="h-10 rounded bg-zinc-900 border border-zinc-800 flex items-center justify-center font-mono text-xs text-zinc-600 transition-colors">0</div>
-          <div class="text-[8px] font-mono text-zinc-500">P34</div>
-          <div class="text-[8px] font-mono text-zinc-600">-3.5k</div>
-        </div>
-        <!-- Sensor 1 -->
-        <div class="space-y-1">
-          <div id="sens1" class="h-10 rounded bg-zinc-900 border border-zinc-800 flex items-center justify-center font-mono text-xs text-zinc-600 transition-colors">0</div>
-          <div class="text-[8px] font-mono text-zinc-500">P35</div>
-          <div class="text-[8px] font-mono text-zinc-600">-2.5k</div>
-        </div>
-        <!-- Sensor 2 -->
-        <div class="space-y-1">
-          <div id="sens2" class="h-10 rounded bg-zinc-900 border border-zinc-800 flex items-center justify-center font-mono text-xs text-zinc-600 transition-colors">0</div>
-          <div class="text-[8px] font-mono text-zinc-500">P32</div>
-          <div class="text-[8px] font-mono text-zinc-600">-1.5k</div>
-        </div>
-        <!-- Sensor 3 -->
-        <div class="space-y-1">
-          <div id="sens3" class="h-10 rounded bg-zinc-900 border border-zinc-800 flex items-center justify-center font-mono text-xs text-zinc-600 transition-colors">0</div>
-          <div class="text-[8px] font-mono text-zinc-500">P33</div>
-          <div class="text-[8px] font-mono text-zinc-600">-500</div>
-        </div>
-        <!-- Sensor 4 -->
-        <div class="space-y-1">
-          <div id="sens4" class="h-10 rounded bg-zinc-900 border border-zinc-800 flex items-center justify-center font-mono text-xs text-zinc-600 transition-colors">0</div>
-          <div class="text-[8px] font-mono text-zinc-500">P25</div>
-          <div class="text-[8px] font-mono text-zinc-600">+500</div>
-        </div>
-        <!-- Sensor 5 -->
-        <div class="space-y-1">
-          <div id="sens5" class="h-10 rounded bg-zinc-900 border border-zinc-800 flex items-center justify-center font-mono text-xs text-zinc-600 transition-colors">0</div>
-          <div class="text-[8px] font-mono text-zinc-500">P26</div>
-          <div class="text-[8px] font-mono text-zinc-600">+1.5k</div>
-        </div>
-        <!-- Sensor 6 -->
-        <div class="space-y-1">
-          <div id="sens6" class="h-10 rounded bg-zinc-900 border border-zinc-800 flex items-center justify-center font-mono text-xs text-zinc-600 transition-colors">0</div>
-          <div class="text-[8px] font-mono text-zinc-500">P04</div>
-          <div class="text-[8px] font-mono text-zinc-600">+2.5k</div>
-        </div>
-        <!-- Sensor 7 -->
-        <div class="space-y-1">
-          <div id="sens7" class="h-10 rounded bg-zinc-900 border border-zinc-800 flex items-center justify-center font-mono text-xs text-zinc-600 transition-colors">0</div>
-          <div class="text-[8px] font-mono text-zinc-500">P15</div>
-          <div class="text-[8px] font-mono text-zinc-600">+3.5k</div>
-        </div>
-      </div>
+    <div class="controls-grid">
+      <button id="mainToggleBtn" class="btn btn-main" onclick="toggleStart()">
+        <span id="mainBtnText">START</span>
+        <span class="btn-subtext" id="mainBtnSub">CMD: 'S'</span>
+      </button>
 
-      <!-- Line Error Meter -->
-      <div class="space-y-1.5 pt-2 border-t border-oled-border">
-        <div class="flex justify-between text-[10px] font-mono text-zinc-400">
-          <span>LEFT HEAVY</span>
-          <span>WEIGHTED ERR: <span id="errorVal" class="text-oled-accent font-bold">0</span></span>
-          <span>RIGHT HEAVY</span>
-        </div>
-        <div class="w-full h-2 bg-zinc-900 rounded-full overflow-hidden p-0.5 border border-zinc-800">
-          <div id="errorBar" class="h-full bg-oled-accent rounded-full transition-all duration-150" style="width: 50%;"></div>
-        </div>
-      </div>
+      <button class="btn" onclick="sendCommand('L')">
+        <span>CLEAN LEFT</span>
+        <span class="btn-subtext">JOG MOTOR [L]</span>
+      </button>
 
-      <!-- Query Button / Simulate Toggle -->
-      <div class="flex gap-2 pt-2">
-        <button onclick="pollSensors()" class="flex-1 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-xs font-mono font-semibold text-white flex items-center justify-center gap-1.5 btn-tactile">
-          <i data-lucide="refresh-cw" class="w-3.5 h-3.5 text-zinc-400"></i>
-          <span>READ SENSORS</span>
-        </button>
-      </div>
+      <button class="btn" onclick="sendCommand('R')">
+        <span>CLEAN RIGHT</span>
+        <span class="btn-subtext">JOG MOTOR [R]</span>
+      </button>
 
+      <button class="btn btn-secondary" onclick="openSensors()">
+        <span>CHECK SENSORS</span>
+        <span class="btn-subtext">8-CHANNEL ARRAY</span>
+      </button>
+    </div>
+
+    <div class="action-bar">
+      <button id="connectBtn" class="btn-connect" onclick="connectBT()">CONNECT BOT</button>
+      <button id="installBtn" class="btn-install" onclick="installApp()">INSTALL APP</button>
     </div>
   </div>
 
-  <!-- APPLICATION JAVASCRIPT LOGIC -->
-  <script>
-    // Initialize Lucide icons
-    lucide.createIcons();
+  <!-- Sensor Array Modal -->
+  <div id="sensorModal" class="sensor-panel">
+    <div class="sensor-header">
+      <span style="font-size: 1.1rem; font-weight: 700;">Sensor Array Monitor</span>
+      <button class="close-btn" onclick="closeSensors()">Close</button>
+    </div>
+    
+    <div class="sensor-grid" id="sensorContainer"></div>
 
-    // App & Connection State
-    let isConnected = false;
-    let isRunning = false;
+    <p style="font-size: 0.8rem; color: #8e8e93; text-align: center;">
+      Pins: 34, 35, 32, 33, 25, 26, 4, 15
+    </p>
+  </div>
+
+  <script>
     let bluetoothDevice = null;
+    let gattServer = null;
     let txCharacteristic = null;
+    let isRunning = false;
     let deferredPrompt = null;
 
-    // Standard SPP & Nordic UART Bluetooth UUIDs
-    const BT_UUIDS = [
-      '6e400001-b5a3-f393-e0a9-e50e24dcca9e', // Nordic UART
-      '00001101-0000-1000-8000-00805f9b34fb'  // Standard Serial SPP
-    ];
-    const BT_TX_UUID = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
+    // Render sensor array layout
+    const sensorPins = [34, 35, 32, 33, 25, 26, 4, 15];
+    const sensorContainer = document.getElementById('sensorContainer');
+    
+    sensorPins.forEach((pin, index) => {
+      const item = document.createElement('div');
+      item.className = 'sensor-item';
+      item.innerHTML = `
+        <div class="sensor-led" id="led-${index}"></div>
+        <span class="sensor-pin">${pin}</span>
+      `;
+      sensorContainer.appendChild(item);
+    });
 
-    // Sensor Weights
-    const weights = [-3500, -2500, -1500, -500, 500, 1500, 2500, 3500];
-
-    // INLINE PWA MANIFEST INJECTION
-    (function injectPWAManifest() {
-      const manifest = {
-        name: "Line Follower Robot",
-        short_name: "LF Bot",
-        start_url: "./",
-        display: "standalone",
-        background_color: "#000000",
-        theme_color: "#000000",
-        icons: [
-          {
-            src: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' fill='%2322c55e'><circle cx='50' cy='50' r='40'/></svg>",
-            sizes: "192x192",
-            type: "image/svg+xml"
-          }
-        ]
-      };
-      const stringManifest = JSON.stringify(manifest);
-      const blob = new Blob([stringManifest], { type: 'application/json' });
-      const manifestURL = URL.createObjectURL(blob);
-      document.getElementById('manifest-link').setAttribute('href', manifestURL);
-    })();
-
-    // INLINE SERVICE WORKER FOR OFFLINE PWA CAPABILITY
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        const swCode = `
-          self.addEventListener('install', (e) => e.waitUntil(self.skipWaiting()));
-          self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
-          self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request).catch(() => new Response('Offline'))));
-        `;
-        const blob = new Blob([swCode], { type: 'text/javascript' });
-        navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(err => console.log('SW error:', err));
-      });
-    }
-
-    // PWA INSTALLATION PROMPT HOOK
+    // Handle PWA Installation
     window.addEventListener('beforeinstallprompt', (e) => {
       e.preventDefault();
       deferredPrompt = e;
-      document.getElementById('pwaInstallBtn').classList.remove('hidden');
+      document.getElementById('installBtn').style.display = 'block';
     });
 
-    function installPWA() {
-      if (!deferredPrompt) return;
-      deferredPrompt.prompt();
-      deferredPrompt.userChoice.then((choiceResult) => {
-        if (choiceResult.outcome === 'accepted') {
-          log("PWA Installed to Home Screen!");
-          document.getElementById('pwaInstallBtn').classList.add('hidden');
+    async function installApp() {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') {
+          document.getElementById('installBtn').style.display = 'none';
         }
         deferredPrompt = null;
-      });
+      }
     }
 
-    // BLUETOOTH CONNECTION CONTROLLER
-    async function toggleBluetooth() {
-      if (isConnected) {
-        if (bluetoothDevice && bluetoothDevice.gatt.connected) {
-          bluetoothDevice.gatt.disconnect();
-        }
-        setBTState(false);
-        log("Disconnected from Bluetooth");
-        return;
-      }
-
+    // Bluetooth Web API Connection
+    async function connectBT() {
       if (!navigator.bluetooth) {
-        log("Web Bluetooth not supported in this browser");
-        alert("Web Bluetooth API is required. Please use Google Chrome, Edge, or Chrome for Android.");
+        alert('Web Bluetooth is not supported on this browser. Try Chrome on Android.');
         return;
       }
 
       try {
-        log("Scanning for LineFollowerBot...");
         bluetoothDevice = await navigator.bluetooth.requestDevice({
           acceptAllDevices: true,
-          optionalServices: BT_UUIDS
+          optionalServices: [
+            '00001101-0000-1000-8000-00805f9b34fb', // Serial SPP
+            '6e400001-b5a3-f393-e0a9-e50e24dcca9e'  // Nordic UART
+          ]
         });
 
-        bluetoothDevice.addEventListener('gattserverdisconnected', () => {
-          setBTState(false);
-          log("Connection lost");
-        });
+        bluetoothDevice.addEventListener('gattserverdisconnected', onDisconnected);
+        gattServer = await bluetoothDevice.gatt.connect();
 
-        log("Connecting GATT Server...");
-        const server = await bluetoothDevice.gatt.connect();
-        
-        try {
-          const service = await server.getPrimaryService(BT_UUIDS[0]);
-          txCharacteristic = await service.getCharacteristic(BT_TX_UUID);
-        } catch (e) {
-          console.log("Custom UART characteristic lookup fallback:", e);
+        // Update UI
+        document.getElementById('statusBadge').classList.add('connected');
+        document.getElementById('statusText').innerText = 'CONNECTED';
+        document.getElementById('connectBtn').innerText = 'DISCONNECT';
+        document.getElementById('connectBtn').onclick = disconnectBT;
+
+      } catch (error) {
+        console.error('Bluetooth connection failed:', error);
+      }
+    }
+
+    function disconnectBT() {
+      if (bluetoothDevice && bluetoothDevice.gatt.connected) {
+        bluetoothDevice.gatt.disconnect();
+      }
+    }
+
+    function onDisconnected() {
+      document.getElementById('statusBadge').classList.remove('connected');
+      document.getElementById('statusText').innerText = 'DISCONNECTED';
+      document.getElementById('connectBtn').innerText = 'CONNECT BOT';
+      document.getElementById('connectBtn').onclick = connectBT;
+    }
+
+    async function sendCommand(cmd) {
+      if (!bluetoothDevice || !bluetoothDevice.gatt.connected) {
+        console.log('Sending offline test command:', cmd);
+        return;
+      }
+
+      try {
+        // Send single ASCII character command to ESP32
+        const encoder = new TextEncoder();
+        const services = await gattServer.getPrimaryServices();
+        if (services.length > 0) {
+          const characteristics = await services[0].getCharacteristics();
+          if (characteristics.length > 0) {
+            await characteristics[0].writeValue(encoder.encode(cmd));
+          }
         }
-
-        setBTState(true);
-        log(`Connected to ${bluetoothDevice.name || 'LineFollowerBot'}`);
-
       } catch (err) {
-        log(`BT Error: ${err.message}`);
-        setBTState(false);
+        console.error('Failed to send character command:', err);
       }
     }
 
-    function setBTState(connected) {
-      isConnected = connected;
-      const dot = document.getElementById('btDot');
-      const text = document.getElementById('btStatusText');
-      const btnLabel = document.getElementById('btBtnLabel');
+    function toggleStart() {
+      const btn = document.getElementById('mainToggleBtn');
+      const text = document.getElementById('mainBtnText');
+      const sub = document.getElementById('mainBtnSub');
 
-      if (connected) {
-        dot.className = "w-2.5 h-2.5 rounded-full bg-oled-green glow-green";
-        text.innerText = "CONNECTED";
-        text.className = "text-xs font-mono tracking-widest text-oled-green uppercase font-bold";
-        btnLabel.innerText = "DISCONNECT";
-      } else {
-        dot.className = "w-2.5 h-2.5 rounded-full bg-oled-red animate-pulse";
-        text.innerText = "OFFLINE";
-        text.className = "text-xs font-mono tracking-widest text-zinc-400 uppercase";
-        btnLabel.innerText = "CONNECT";
-      }
-    }
-
-    // MAIN START / STOP HERO ACTION
-    function toggleStartStop() {
       if (!isRunning) {
         sendCommand('S');
-        setRunState(true);
+        btn.classList.add('running');
+        text.innerText = 'STOP';
+        sub.innerText = "CMD: 'X'";
+        isRunning = true;
       } else {
         sendCommand('X');
-        setRunState(false);
+        btn.classList.remove('running');
+        text.innerText = 'START';
+        sub.innerText = "CMD: 'S'";
+        isRunning = false;
       }
     }
 
-    function setRunState(running) {
-      isRunning = running;
-      const btn = document.getElementById('startStopBtn');
-      const ring = document.getElementById('heroPulseRing');
-      const icon = document.getElementById('heroIcon');
-      const title = document.getElementById('heroTitle');
-      const sub = document.getElementById('heroSub');
-
-      if (running) {
-        btn.className = "w-full h-full rounded-2xl bg-emerald-950/60 border-2 border-oled-green flex flex-col items-center justify-center p-6 transition-all duration-200 btn-tactile relative overflow-hidden glow-green";
-        ring.className = "w-20 h-20 rounded-full bg-oled-green/20 flex items-center justify-center mb-3 transition-all duration-300";
-        icon.className = "w-10 h-10 text-oled-green transition-colors";
-        icon.setAttribute('data-lucide', 'square');
-        title.innerText = "STOP";
-        title.className = "text-2xl font-black font-mono tracking-wider text-oled-green";
-        sub.innerText = "CMD: 'X' (MOTORS ACTIVE)";
-      } else {
-        btn.className = "w-full h-full rounded-2xl bg-zinc-950 border-2 border-zinc-800 flex flex-col items-center justify-center p-6 transition-all duration-200 btn-tactile relative overflow-hidden group";
-        ring.className = "w-20 h-20 rounded-full bg-zinc-900 flex items-center justify-center mb-3 transition-all duration-300";
-        icon.className = "w-10 h-10 text-zinc-400 transition-colors";
-        icon.setAttribute('data-lucide', 'play');
-        title.innerText = "START";
-        title.className = "text-2xl font-black font-mono tracking-wider text-white";
-        sub.innerText = "CMD: 'S' (LINE FOLLOW)";
-      }
-      lucide.createIcons();
+    function openSensors() {
+      document.getElementById('sensorModal').classList.add('active');
     }
 
-    // DISPATCH COMMAND TO ESP32
-    async function sendCommand(char) {
-      log(`TX Command: '${char}'`);
-
-      if (char === 'L' || char === 'R') {
-        if (isRunning) setRunState(false);
-      }
-
-      if (isConnected && txCharacteristic) {
-        try {
-          const encoder = new TextEncoder();
-          await txCharacteristic.writeValue(encoder.encode(char));
-        } catch (e) {
-          log(`TX Fail: ${e.message}`);
-        }
-      }
-    }
-
-    // SENSOR MODAL LOGIC
-    function openSensorsModal() {
-      const modal = document.getElementById('sensorModal');
-      modal.classList.remove('opacity-0', 'pointer-events-none');
-      pollSensors();
-    }
-
-    function closeSensorsModal() {
-      const modal = document.getElementById('sensorModal');
-      modal.classList.add('opacity-0', 'pointer-events-none');
-    }
-
-    function pollSensors() {
-      // Simulate/Read 8 digital IR sensors
-      const simulatedReadings = Array.from({length: 8}, () => Math.random() > 0.5 ? 1 : 0);
-      updateSensorDisplay(simulatedReadings);
-      log("Sensors Array Updated");
-    }
-
-    function updateSensorDisplay(readings) {
-      let activeCount = 0;
-      let weightedSum = 0;
-
-      for (let i = 0; i < 8; i++) {
-        const val = readings[i];
-        const el = document.getElementById(`sens${i}`);
-        el.innerText = val;
-
-        if (val === 1) {
-          el.className = "h-10 rounded bg-oled-green text-black font-bold flex items-center justify-center font-mono text-xs shadow-sm glow-green transition-colors";
-          activeCount++;
-          weightedSum += weights[i];
-        } else {
-          el.className = "h-10 rounded bg-zinc-900 border border-zinc-800 flex items-center justify-center font-mono text-xs text-zinc-600 transition-colors";
-        }
-      }
-
-      const errVal = activeCount > 0 ? Math.round(weightedSum / activeCount) : 0;
-      document.getElementById('errorVal').innerText = errVal;
-
-      const percentage = ((errVal + 3500) / 7000) * 100;
-      document.getElementById('errorBar').style.width = `${Math.max(5, Math.min(95, percentage))}%`;
-    }
-
-    // LOGGING HELPER
-    function log(msg) {
-      document.getElementById('logOutput').innerHTML = `<span class="truncate">${msg}</span>`;
-      document.getElementById('logTimestamp').innerText = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    function closeSensors() {
+      document.getElementById('sensorModal').classList.remove('active');
     }
   </script>
 </body>
